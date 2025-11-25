@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { RefreshCw, Trophy, Activity, Users, ArrowUp, CornerUpRight, FastForward, MapPin, AlertCircle, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Trophy, Activity, Users, ArrowUp, CornerUpRight, FastForward, AlertCircle, Copy, Check } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, User } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, collection } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 
 /**
  * ============================================================================

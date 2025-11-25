@@ -10,7 +10,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, c
  * ============================================================================
  */
 
-// Your web app's Firebase configuration
+// Your actual Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyB0PSNUKgfx7Vsfp1eZKdd71L6_mo-MIgw",
   authDomain: "mind-the-gap-9ccb7.firebaseapp.com",
@@ -19,11 +19,14 @@ const firebaseConfig = {
   messagingSenderId: "118481767440",
   appId: "1:118481767440:web:7cd2df6e9a0d45fab9ce95"
 };
+
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// @ts-ignore
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'mind-the-gap';
+
+// Hardcoded App ID for your standalone deployment
+const appId = 'mind-the-gap';
 
 /**
  * ============================================================================
@@ -34,7 +37,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'mind-the-gap';
 const CONFIG = {
   gridSize: 20,
   winScore: 20,
-  landmarkSpacing: 3, // Changed from 4 to 3 per request
+  landmarkSpacing: 3, 
   maxSegmentsPerLandmarkPerPlayer: 2, 
   maxColorsPerLandmark: 2, 
   handSize: 5,
@@ -243,11 +246,7 @@ const generateInitialHand = (deckRef: string[]): { hand: HandCard[], newDeck: st
 const canPlaceLandmark = (state: GameState, pos: Point, playerId: string): { valid: boolean; reason?: string } => {
   if (state.placedLandmarks.some(l => pointsEqual(l.pos, pos))) return { valid: false, reason: 'Occupied' };
   
-  // NOTE: Removed the "Cannot place on track" restriction. 
-  // You CAN place a landmark on a grid node that has a track segment connected to it.
-  // This allows "building to a spot then placing the landmark".
-
-  // 1. Spacing Rule: >= 3 spaces from:
+  // Spacing Rule: >= 3 spaces from:
   // A) Any unconnected (floating) landmark
   // B) Any landmark connected to ME
   // IGNORE opponent's connected landmarks
@@ -430,13 +429,7 @@ export default function App() {
   // --- 1. AUTH SETUP ---
   useEffect(() => {
     const initAuth = async () => {
-      // @ts-ignore
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        // @ts-ignore
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
+      await signInAnonymously(auth);
     };
     initAuth();
     return onAuthStateChanged(auth, setUser);

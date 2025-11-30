@@ -48,14 +48,19 @@ interface LandmarkType {
 }
 
 const CATEGORY_COLORS: Record<Category, string> = {
-  Spiritual: 'bg-[#6b2c91]', // Deep Purple
-  Thrilling: 'bg-[#00a4a7]', // Teal
-  Cultural: 'bg-[#9e1b32]',  // Maroon
-  Foodie: 'bg-[#e35205]',    // Orange
-  Relaxing: 'bg-[#87ceeb]',  // Sky Blue
-  Nature: 'bg-[#4c8c2b]',    // Leaf Green
-  Services: 'bg-[#cc0000]',  // Bright Red
+  Spiritual: 'bg-[#6b2c91]', 
+  Thrilling: 'bg-[#00a4a7]', 
+  Cultural: 'bg-[#9e1b32]',  
+  Foodie: 'bg-[#e35205]',    
+  Relaxing: 'bg-[#87ceeb]',  
+  Nature: 'bg-[#4c8c2b]',    
+  Services: 'bg-[#cc0000]',  
   Special: 'bg-slate-800'
+};
+
+const CATEGORY_DIFFICULTY: Record<Category, Difficulty> = {
+  Spiritual: 'Rare', Thrilling: 'Medium', Cultural: 'Medium', Foodie: 'Easy',
+  Relaxing: 'Hard', Nature: 'Medium', Services: 'Easy', Special: 'Easy'
 };
 
 const LANDMARK_TYPES: LandmarkType[] = [
@@ -117,7 +122,6 @@ const PASSENGER_PERSONAS: PassengerPersona[] = [
   { id: 'p_romantic', personaName: 'The Romantic', from: {type: 'CATEGORY', value: 'Nature'}, to: {type: 'SPECIFIC', value: 'l_rooftop'} },
 ];
 
-/** --- TYPES --- */
 type CardType = 'TRACK_STRAIGHT' | 'TRACK_CURVE' | 'LANDMARK';
 interface HandCard { id: string; type: CardType; landmarkTypeId?: string; }
 interface Point { x: number; y: number; }
@@ -135,11 +139,6 @@ interface GameState {
   landmarkDeck: string[]; passengerDeck: string[]; faceUpPassengers: string[];
   passengerDiscard: string[]; log: string[];
 }
-
-const CATEGORY_DIFFICULTY: Record<Category, Difficulty> = {
-  Spiritual: 'Rare', Thrilling: 'Medium', Cultural: 'Medium', Foodie: 'Easy',
-  Relaxing: 'Hard', Nature: 'Medium', Services: 'Easy', Special: 'Easy'
-};
 
 /** --- HELPERS --- */
 const getManhattanDist = (p1: Point, p2: Point) => Math.abs(p1.x - p2.x) + Math.abs(p1.y - p2.y);
@@ -455,6 +454,7 @@ function Game() {
       s.currentPlayerIndex = (s.currentPlayerIndex + 1) % s.players.length;
       s.turnNumber++;
     }
+    
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', s.roomCode), s);
     setSelectedCardIdx(null); setSelectedNode(null); setShowTunnelMode(false); setSwapMode(false); setSelectedForSwap([]);
   };
@@ -730,14 +730,32 @@ function Game() {
                 <div className="space-y-2">
                    {gameState.faceUpPassengers.map(pid => {
                       const p = PASSENGER_PERSONAS.find(x=>x.id===pid)!;
-                      const fromL = p.from.type==='SPECIFIC' ? LANDMARK_TYPES.find(l=>l.id===p.from.value)?.emoji : <span className="text-[10px] font-bold px-1 bg-slate-100 border rounded">{p.from.value}</span>;
-                      const toL = p.to.type==='SPECIFIC' ? LANDMARK_TYPES.find(l=>l.id===p.to.value)?.emoji : <span className="text-[10px] font-bold px-1 bg-slate-100 border rounded">{p.to.value}</span>;
+                      
+                      // Fix the rendering here by ensuring we return text or a simple element, not an object
+                      const fromLabel = p.from.type === 'SPECIFIC' 
+                        ? (LANDMARK_TYPES.find(l => l.id === p.from.value)?.emoji || p.from.value) 
+                        : p.from.value;
+                      
+                      const toLabel = p.to.type === 'SPECIFIC'
+                        ? (LANDMARK_TYPES.find(l => l.id === p.to.value)?.emoji || p.to.value)
+                        : p.to.value;
+
                       const isDone = me?.completedPassengers.includes(pid);
+                      
                       return (
                          <div key={pid} className={`p-2 border rounded bg-white flex flex-col gap-1 ${isDone?'opacity-50':''}`}>
                             <div className="font-bold text-sm">{p.personaName}</div>
-                            <div className="flex items-center gap-2 text-slate-600">
-                               {fromL} <ArrowUp size={12} className="rotate-90"/> {toL}
+                            <div className="flex items-center gap-2 text-slate-600 text-xs">
+                               {/* If it's a category, show text pill. If emoji, show emoji */}
+                               {p.from.type === 'CATEGORY' 
+                                 ? <span className="px-1.5 py-0.5 rounded bg-slate-100 border font-bold">{fromLabel}</span>
+                                 : <span className="text-base">{fromLabel}</span>
+                               }
+                               <ArrowUp size={12} className="rotate-90"/> 
+                               {p.to.type === 'CATEGORY'
+                                 ? <span className="px-1.5 py-0.5 rounded bg-slate-100 border font-bold">{toLabel}</span>
+                                 : <span className="text-base">{toLabel}</span>
+                               }
                             </div>
                          </div>
                       )

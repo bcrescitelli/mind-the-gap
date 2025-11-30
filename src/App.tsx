@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Trophy, Activity, Users, ArrowUp, CornerUpRight, Copy, Check, Menu, X, RotateCcw, MapPin, Ticket, Ban } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Trophy, Activity, Users, ArrowUp, CornerUpRight, Copy, Check, Menu, X, RotateCcw, Info, AlertCircle } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -17,11 +17,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'mind-the-gap-v3'; // New version to reset state
+const appId = 'mind-the-gap-v3'; 
 
 /** --- CONFIG --- */
 const CONFIG = {
-  gridSize: 21, // Odd number ensures a perfect center integer
+  gridSize: 21, 
   winScore: 5,
   landmarkSpacing: 3,
   handSize: 5,
@@ -47,7 +47,6 @@ interface LandmarkType {
   color: string; 
 }
 
-// Accurate colors from your screenshots
 const CATEGORY_COLORS: Record<Category, string> = {
   Spiritual: 'bg-[#6b2c91]', // Deep Purple
   Thrilling: 'bg-[#00a4a7]', // Teal
@@ -184,13 +183,9 @@ const generateInitialHand = (deckRef: string[]): { hand: HandCard[], newDeck: st
 };
 
 /** --- GAME LOGIC --- */
-
 const canPlaceLandmark = (state: GameState, pos: Point, playerId: string): { valid: boolean; reason?: string } => {
   if (state.placedLandmarks.some(l => pointsEqual(l.pos, pos))) return { valid: false, reason: 'Occupied' };
   
-  // Spacing Rule: >= 3 spaces from:
-  // A) Any unconnected (floating) landmark
-  // B) Any landmark connected to ME
   const tooClose = state.placedLandmarks.some(l => {
     if (getManhattanDist(l.pos, pos) >= CONFIG.landmarkSpacing) return false;
     const isFloating = l.connectedColors.length === 0;
@@ -199,28 +194,28 @@ const canPlaceLandmark = (state: GameState, pos: Point, playerId: string): { val
   });
   if (tooClose) return { valid: false, reason: 'Too close to unconnected or your landmark' };
 
-  // Proximity: Must be within 3 spaces of MY network (or City Hall)
   const mySegments = state.placedSegments.filter(s => s.playerId === playerId);
-  let validAnchors: Point[] = [];
-  const ch = state.placedLandmarks.find(l => l.typeId === 'l_cityhall');
-  if (ch) validAnchors.push(ch.pos); 
-  
   const degreeMap = new Map<string, number>();
   mySegments.forEach(s => {
     degreeMap.set(`${s.from.x},${s.from.y}`, (degreeMap.get(`${s.from.x},${s.from.y}`)||0)+1);
     degreeMap.set(`${s.to.x},${s.to.y}`, (degreeMap.get(`${s.to.x},${s.to.y}`)||0)+1);
   });
-  
-  // Anchors are tips (degree 1) or City Hall
-  mySegments.forEach(s => {
-     validAnchors.push(s.from, s.to); // Allow anywhere along track for landmarks? Or just tips?
-     // User asked to place landmarks "on" the track. So any node I have is an anchor.
+
+  let validAnchors: Point[] = [];
+  const ch = state.placedLandmarks.find(l => l.typeId === 'l_cityhall');
+  if (ch) validAnchors.push(ch.pos); 
+
+  degreeMap.forEach((deg, key) => {
+    if (deg === 1) { 
+      const [x, y] = key.split(',').map(Number);
+      validAnchors.push({ x, y });
+    }
   });
-  
-  if (validAnchors.length === 0 && !ch) return { valid: false, reason: "No network" };
-  
+
   const isWithinRange = validAnchors.some(anchor => getManhattanDist(anchor, pos) <= CONFIG.landmarkSpacing);
-  if (!isWithinRange && mySegments.length > 0) return { valid: false, reason: 'Must place near your tracks' };
+  if (!isWithinRange && mySegments.length > 0) {
+    return { valid: false, reason: 'Must place near your tracks (Distance <= 3)' };
+  }
 
   return { valid: true };
 };
@@ -244,19 +239,16 @@ const canPlaceTrack = (state: GameState, from: Point, to: Point, playerId: strin
     return { valid: false, reason: 'Must connect to your track' };
   }
 
-  // Loop/Merge Check
   const fromHasMyTrack = state.placedSegments.some(s => s.playerId === playerId && (pointsEqual(s.from, from) || pointsEqual(s.to, from)));
   const toHasMyTrack = state.placedSegments.some(s => s.playerId === playerId && (pointsEqual(s.from, to) || pointsEqual(s.to, to)));
   if (fromHasMyTrack && toHasMyTrack && !isCityHall(from) && !isCityHall(to)) {
      return { valid: false, reason: "Cannot merge/loop own tracks" };
   }
 
-  // Degree Limit (No Branching)
   const getMyDegree = (p: Point) => state.placedSegments.filter(s => s.playerId === playerId && (pointsEqual(s.from, p) || pointsEqual(s.to, p))).length;
   if (!isCityHall(from) && getMyDegree(from) >= 2) return { valid: false, reason: "No branching allowed" };
   if (!isCityHall(to) && getMyDegree(to) >= 2) return { valid: false, reason: "No branching allowed" };
 
-  // Geometry
   const anchor = hasOwnTrackAt(from) || isCityHall(from) ? from : to;
   const target = anchor === from ? to : from;
   const mySegs = state.placedSegments.filter(s => s.playerId === playerId && (pointsEqual(s.from, anchor) || pointsEqual(s.to, anchor)));
@@ -365,6 +357,7 @@ function Game() {
   const [selectedForSwap, setSelectedForSwap] = useState<number[]>([]);
   const [hoverLandmark, setHoverLandmark] = useState<{ name: string, cat: string, x: number, y: number } | null>(null);
   const [hoverNode, setHoverNode] = useState<Point | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => { signInAnonymously(auth); return onAuthStateChanged(auth, setUser); }, []);
   useEffect(() => { if (!localStorage.getItem('mtg_intro')) { setShowOnboarding(true); localStorage.setItem('mtg_intro', 'true'); } }, []);
@@ -471,17 +464,10 @@ function Game() {
     const s = {...gameState};
     const p = s.players[s.currentPlayerIndex];
     
-    // Discard selected
-    // Filter OUT indices that are in selectedForSwap
-    // This is tricky with indices changing. Better to map to ID.
     const idsToRemove = selectedForSwap.map(idx => p.hand[idx].id);
     p.hand = p.hand.filter(c => !idsToRemove.includes(c.id));
 
-    // Draw new ones
     while (p.hand.length < 5) {
-      // Try drawing track or landmark? Random? Or based on what was discarded?
-      // Rule said "swap track". Let's just draw random to fill hand.
-      // 60% chance track, 40% landmark if deck available
       if (Math.random() > 0.4 || s.landmarkDeck.length === 0) {
          p.hand.push(drawTrack());
       } else {
@@ -540,7 +526,6 @@ function Game() {
           ns.players[pIdx].segmentsPlaced++;
           ns.placedSegments.push({ id: getSegmentId(selectedNode, clicked), from: selectedNode, to: clicked, playerId: p.id });
           
-          // Update connections
           [selectedNode, clicked].forEach(pt => {
              const lm = ns.placedLandmarks.find(l => pointsEqual(l.pos, pt));
              if(lm && !lm.connectedColors.includes(p.id)) lm.connectedColors.push(p.id);
@@ -564,7 +549,7 @@ function Game() {
 
   if (view === 'LOBBY') {
     return (
-      <div className="flex h-screen bg-slate-800 items-center justify-center p-4">
+      <div className="flex min-h-screen bg-slate-800 items-center justify-center p-4">
         <div className="bg-white p-8 rounded-lg shadow-2xl max-w-md w-full">
           <h1 className="text-3xl font-bold text-slate-900 mb-6 flex items-center gap-2"><Activity className="text-blue-600"/> Mind the Gap</h1>
           <div className="space-y-4">
@@ -589,187 +574,202 @@ function Game() {
   const me = gameState.players.find(p => p.id === user?.uid);
 
   return (
-    <div className="h-screen w-screen flex flex-col md:flex-row bg-[#f5f5f4] font-sans text-slate-800">
+    <div className="flex flex-col md:flex-row h-screen md:h-screen min-h-screen w-full bg-[#f5f5f4] font-sans text-slate-800">
+      {/* HEADER */}
+      <div className="md:hidden h-14 bg-white border-b flex items-center justify-between px-4 z-50 flex-none sticky top-0">
+         <div className="font-bold flex items-center gap-2"><Activity size={18}/> {gameState.roomCode}</div>
+         <div className="flex gap-2">
+            <button onClick={()=>setShowOnboarding(true)} className="p-2 bg-slate-100 rounded-full"><Info size={18}/></button>
+            <button onClick={() => setMenuOpen(true)} className="p-2 bg-slate-100 rounded-full"><Menu size={18}/></button>
+         </div>
+      </div>
+
       {hoverLandmark && (
         <div className="fixed z-50 px-3 py-1 bg-slate-800 text-white text-xs rounded shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full whitespace-nowrap" style={{ left: hoverLandmark.x, top: hoverLandmark.y }}>
           <div className="font-bold">{hoverLandmark.name}</div>
         </div>
       )}
-      {toast && <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded shadow-lg text-white font-bold transition-all ${toast.type==='error'?'bg-red-500':'bg-green-500'}`}>{toast.msg}</div>}
-
-      {/* MAIN BOARD */}
-      <div className="flex-1 relative bg-slate-200 overflow-auto flex items-center justify-center p-8">
-        <div className="relative bg-white shadow-xl border-4 border-slate-300 flex-none" style={{ width: CONFIG.gridSize * 40, height: CONFIG.gridSize * 40 }}>
-          <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-          <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
-             {gameState.placedSegments.map(seg => {
-                const p = gameState.players.find(pl => pl.id === seg.playerId);
-                const color = p ? CONFIG.colors[p.colorIdx].hex : '#999';
-                const x1=seg.from.x*40+20, y1=seg.from.y*40+20, x2=seg.to.x*40+20, y2=seg.to.y*40+20;
-                return (
-                   <g key={seg.id}>
-                     <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="12" strokeLinecap="round" />
-                     {seg.isTunnel && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth="4" strokeLinecap="round" strokeDasharray="4,4" opacity={0.5}/>}
-                   </g>
-                )
-             })}
-             {myTurn && selectedNode && selectedCardIdx !== null && me?.hand[selectedCardIdx].type.startsWith('TRACK') && (
-                [{x:0,y:1},{x:0,y:-1},{x:1,y:0},{x:-1,y:0}].map((d,i) => {
-                   const t = {x: selectedNode.x+d.x, y: selectedNode.y+d.y};
-                   if (t.x<0||t.x>=CONFIG.gridSize||t.y<0||t.y>=CONFIG.gridSize) return null;
-                   const res = canPlaceTrack(gameState, selectedNode, t, me.id, me.hand[selectedCardIdx].type as any);
-                   if (res.valid) return <circle key={i} cx={t.x*40+20} cy={t.y*40+20} r="6" className="fill-blue-400 animate-pulse"/>;
-                   return null;
-                })
-             )}
-             {myTurn && selectedCardIdx !== null && me?.hand[selectedCardIdx].type === 'LANDMARK' && hoverNode && (
-                canPlaceLandmark(gameState, hoverNode, me.id).valid 
-                  ? <rect x={hoverNode.x*40+2} y={hoverNode.y*40+2} width="36" height="36" className="fill-green-400 opacity-40"/>
-                  : <rect x={hoverNode.x*40+2} y={hoverNode.y*40+2} width="36" height="36" className="fill-red-400 opacity-40"/>
-             )}
-          </svg>
-          <div className="absolute inset-0 grid z-20" style={{ gridTemplateColumns: `repeat(${CONFIG.gridSize}, 1fr)` }} onMouseLeave={() => setHoverNode(null)}>
-             {Array.from({ length: CONFIG.gridSize**2 }).map((_, i) => {
-                const x = i % CONFIG.gridSize, y = Math.floor(i / CONFIG.gridSize);
-                const lm = gameState.placedLandmarks.find(l => l.pos.x===x && l.pos.y===y);
-                const type = lm ? LANDMARK_TYPES.find(t => t.id===lm.typeId) : null;
-                return (
-                  <div key={i} onClick={() => handleNodeClick(x,y)} onMouseEnter={() => { setHoverNode({x,y}); if(type) setHoverLandmark({name:type.name, cat:type.category, x:0, y:0}); }}
-                       className={`relative flex items-center justify-center transition-all ${selectedNode?.x===x && selectedNode?.y===y ? 'bg-blue-100/50' : ''}`}>
-                     {type && (
-                       <div className="text-2xl hover:scale-125 transition-transform cursor-pointer" onMouseEnter={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setHoverLandmark({ name: type.name, cat: type.category, x: rect.left+rect.width/2, y: rect.top-10 });
-                       }} onMouseLeave={()=>setHoverLandmark(null)}>
-                          {type.emoji}
-                       </div>
-                     )}
-                  </div>
-                )
-             })}
+      {toast && <div className={`fixed top-16 md:top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded shadow-lg text-white font-bold transition-all ${toast.type==='error'?'bg-red-500':'bg-green-500'}`}>{toast.msg}</div>}
+      
+      {showOnboarding && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><Activity className="text-blue-600"/> How to Play</h2>
+            <ul className="space-y-3 text-sm text-slate-600 mb-6">
+              <li className="flex gap-2"><Check size={16} className="text-green-600 flex-shrink-0"/> Build track from City Hall to Landmarks.</li>
+              <li className="flex gap-2"><Check size={16} className="text-green-600 flex-shrink-0"/> <b>Straight</b> cards go straight. <b>Curve</b> cards turn.</li>
+              <li className="flex gap-2"><Check size={16} className="text-green-600 flex-shrink-0"/> Place Landmarks 3 spaces away from existing stops.</li>
+              <li className="flex gap-2"><Check size={16} className="text-green-600 flex-shrink-0"/> Use <b>Tunnel</b> once to jump a track.</li>
+            </ul>
+            <button onClick={() => setShowOnboarding(false)} className="w-full py-3 bg-slate-900 text-white rounded-lg font-bold">Let's Go</button>
           </div>
         </div>
+      )}
+
+      {/* LEFT: BOARD */}
+      <div className="flex-1 relative bg-slate-200 overflow-hidden flex flex-col">
+         <div className="flex-1 overflow-auto flex items-center justify-center p-8 min-h-[500px]">
+            <div className="relative bg-white shadow-xl border-4 border-slate-300 flex-none" style={{ width: CONFIG.gridSize * 40, height: CONFIG.gridSize * 40 }}>
+              <div className="absolute inset-0 pointer-events-none" style={{ backgroundImage: 'linear-gradient(#e2e8f0 1px, transparent 1px), linear-gradient(90deg, #e2e8f0 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+              <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+                {gameState.placedSegments.map(seg => {
+                    const p = gameState.players.find(pl => pl.id === seg.playerId);
+                    const color = p ? CONFIG.colors[p.colorIdx].hex : '#999';
+                    const x1=seg.from.x*40+20, y1=seg.from.y*40+20, x2=seg.to.x*40+20, y2=seg.to.y*40+20;
+                    return (
+                      <g key={seg.id}>
+                        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth="12" strokeLinecap="round" />
+                        {seg.isTunnel && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth="4" strokeLinecap="round" strokeDasharray="4,4" opacity={0.5}/>}
+                      </g>
+                    )
+                })}
+                {myTurn && selectedNode && selectedCardIdx !== null && me?.hand[selectedCardIdx].type.startsWith('TRACK') && (
+                    [{x:0,y:1},{x:0,y:-1},{x:1,y:0},{x:-1,y:0}].map((d,i) => {
+                      const t = {x: selectedNode.x+d.x, y: selectedNode.y+d.y};
+                      if (t.x<0||t.x>=CONFIG.gridSize||t.y<0||t.y>=CONFIG.gridSize) return null;
+                      const res = canPlaceTrack(gameState, selectedNode, t, me.id, me.hand[selectedCardIdx].type as any);
+                      if (res.valid) return <circle key={i} cx={t.x*40+20} cy={t.y*40+20} r="6" className="fill-blue-400 animate-pulse"/>;
+                      return null;
+                    })
+                )}
+                {myTurn && selectedCardIdx !== null && me?.hand[selectedCardIdx].type === 'LANDMARK' && hoverNode && (
+                    canPlaceLandmark(gameState, hoverNode, me.id).valid 
+                      ? <rect x={hoverNode.x*40+2} y={hoverNode.y*40+2} width="36" height="36" className="fill-green-400 opacity-40"/>
+                      : <rect x={hoverNode.x*40+2} y={hoverNode.y*40+2} width="36" height="36" className="fill-red-400 opacity-40"/>
+                )}
+              </svg>
+              <div className="absolute inset-0 grid z-20" style={{ gridTemplateColumns: `repeat(${CONFIG.gridSize}, 1fr)` }} onMouseLeave={() => setHoverNode(null)}>
+                {Array.from({ length: CONFIG.gridSize**2 }).map((_, i) => {
+                    const x = i % CONFIG.gridSize, y = Math.floor(i / CONFIG.gridSize);
+                    const lm = gameState.placedLandmarks.find(l => l.pos.x===x && l.pos.y===y);
+                    const type = lm ? LANDMARK_TYPES.find(t => t.id===lm.typeId) : null;
+                    return (
+                      <div key={i} onClick={() => handleNodeClick(x,y)} onMouseEnter={() => { setHoverNode({x,y}); if(type) setHoverLandmark({name:type.name, cat:type.category, x:0, y:0}); }}
+                          className={`relative flex items-center justify-center transition-all ${selectedNode?.x===x && selectedNode?.y===y ? 'bg-blue-100/50' : ''}`}>
+                        {type && (
+                          <div className="text-2xl hover:scale-125 transition-transform cursor-pointer" onMouseEnter={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              setHoverLandmark({ name: type.name, cat: type.category, x: rect.left+rect.width/2, y: rect.top-10 });
+                          }} onMouseLeave={()=>setHoverLandmark(null)}>
+                              {type.emoji}
+                          </div>
+                        )}
+                      </div>
+                    )
+                })}
+              </div>
+            </div>
+         </div>
       </div>
 
-      {/* RIGHT PANEL */}
-      <div className="w-96 bg-white border-l flex flex-col shadow-2xl z-30">
-         {gameState.status === 'WAITING' ? (
-            <div className="p-8 flex flex-col items-center justify-center h-full text-center">
-               <h2 className="text-4xl font-mono font-bold text-blue-600 mb-2 tracking-widest">{gameState.roomCode}</h2>
-               <p className="text-slate-500 mb-8">Share code to join</p>
-               <div className="w-full space-y-2 mb-8">
-                  {gameState.players.map((p, i) => (
-                     <div key={p.id} className="flex items-center justify-between p-3 bg-slate-50 rounded border">
-                        <span className="font-bold flex gap-2"><div className={`w-3 h-3 rounded-full ${CONFIG.colors[i].tailwind}`}/> {p.name}</span>
-                        <Check size={16} className="text-green-500"/>
-                     </div>
-                  ))}
-                  {Array.from({length: 4-gameState.players.length}).map((_, i) => <div key={i} className="p-3 border border-dashed rounded text-slate-300 italic">Waiting...</div>)}
-               </div>
-               {gameState.players[0].id === user?.uid ? (
-                  <button onClick={startGame} disabled={gameState.players.length<1} className="w-full py-3 bg-green-600 text-white font-bold rounded hover:bg-green-700 disabled:opacity-50">Start Journey</button>
-               ) : <div className="text-slate-400 italic">Waiting for host...</div>}
+      {/* RIGHT PANEL (Unified) */}
+      <div className={`fixed inset-y-0 right-0 w-96 bg-white border-l flex flex-col shadow-2xl z-40 transform transition-transform duration-300 ${menuOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:static'}`}>
+         <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold uppercase text-slate-500">Turn {gameState.turnNumber}</span>
+                <span className={`px-2 py-0.5 rounded text-xs font-bold ${myTurn ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>{myTurn ? 'YOUR TURN' : `${currentPlayer.name}`}</span>
+              </div>
+              {myTurn && !swapMode && <div className="text-xs text-green-600 font-bold">Choose a card</div>}
+              {swapMode && <div className="text-xs text-orange-600 font-bold">Select cards to discard</div>}
             </div>
-         ) : (
-            <>
-              <div className="p-4 border-b bg-slate-50">
-                 <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold uppercase text-slate-500">Turn {gameState.turnNumber}</span>
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${myTurn ? 'bg-green-100 text-green-700' : 'bg-slate-200 text-slate-600'}`}>{myTurn ? 'YOUR TURN' : `${currentPlayer.name}'s Turn`}</span>
-                 </div>
-                 {myTurn && !swapMode && <div className="text-xs text-green-600 font-bold">Choose a card to play</div>}
-                 {swapMode && <div className="text-xs text-orange-600 font-bold">Select cards to discard</div>}
-              </div>
+            <button onClick={() => setMenuOpen(false)} className="md:hidden p-2 hover:bg-slate-200 rounded"><X/></button>
+         </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                 {/* HAND */}
-                 <div>
-                    <div className="flex justify-between items-center mb-2">
-                       <h3 className="text-xs font-bold text-slate-400 uppercase">Your Hand</h3>
-                       <div className="flex gap-1">
-                          {me?.hasTunnel && <button onClick={()=>setShowTunnelMode(!showTunnelMode)} className={`text-[10px] px-2 py-1 border rounded ${showTunnelMode?'bg-black text-white':''}`}>Tunnel</button>}
-                          {!swapMode ? (
-                             <button onClick={()=>setSwapMode(true)} className="text-[10px] px-2 py-1 border rounded hover:bg-slate-100">Swap</button>
-                          ) : (
-                             <div className="flex gap-1">
-                                <button onClick={confirmSwap} className="text-[10px] px-2 py-1 bg-orange-500 text-white rounded">Confirm</button>
-                                <button onClick={()=>{setSwapMode(false); setSelectedForSwap([]);}} className="text-[10px] px-2 py-1 border rounded">Cancel</button>
-                             </div>
-                          )}
-                       </div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                       {me?.hand.map((card, idx) => {
-                          const lm = card.type==='LANDMARK' ? LANDMARK_TYPES.find(l=>l.id===card.landmarkTypeId) : null;
-                          const isSel = selectedCardIdx === idx || selectedForSwap.includes(idx);
-                          return (
-                             <button key={idx} 
-                                onClick={() => handleCardClick(idx)}
-                                disabled={!myTurn && !swapMode}
-                                className={`relative h-24 flex flex-col items-center justify-center border rounded p-1 transition-all 
-                                   ${isSel ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-slate-50 bg-white'}
-                                   ${swapMode && isSel ? 'ring-orange-500 bg-orange-50' : ''}
-                                `}
-                             >
-                                {card.type === 'LANDMARK' ? (
-                                   <>
-                                      <div className="text-2xl mb-1">{lm?.emoji}</div>
-                                      <div className="text-[9px] font-bold text-center leading-tight">{lm?.name}</div>
-                                      <div className={`absolute top-0 w-full h-1.5 rounded-t ${lm?.color}`}/>
-                                   </>
-                                ) : (
-                                   <>
-                                      <div className="text-slate-600 mb-1">{card.type==='TRACK_STRAIGHT'?<ArrowUp/>:<CornerUpRight/>}</div>
-                                      <div className="text-[9px] font-bold text-center">{card.type==='TRACK_STRAIGHT'?'STRAIGHT':'CURVE'}</div>
-                                   </>
-                                )}
-                             </button>
-                          )
-                       })}
-                    </div>
-                 </div>
+         <div className="flex-1 overflow-y-auto p-4 space-y-6">
+             {/* HAND */}
+             <div>
+                <div className="flex justify-between items-center mb-2">
+                   <h3 className="text-xs font-bold text-slate-400 uppercase">Hand</h3>
+                   <div className="flex gap-1">
+                      {me?.hasTunnel && <button onClick={()=>setShowTunnelMode(!showTunnelMode)} className={`text-[10px] px-2 py-1 border rounded ${showTunnelMode?'bg-black text-white':''}`}>Tunnel</button>}
+                      {!swapMode ? (
+                         <button onClick={()=>setSwapMode(true)} className="text-[10px] px-2 py-1 border rounded hover:bg-slate-100">Swap</button>
+                      ) : (
+                         <div className="flex gap-1">
+                            <button onClick={confirmSwap} className="text-[10px] px-2 py-1 bg-orange-500 text-white rounded">Confirm</button>
+                            <button onClick={()=>{setSwapMode(false); setSelectedForSwap([]);}} className="text-[10px] px-2 py-1 border rounded">Cancel</button>
+                         </div>
+                      )}
+                   </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                   {me?.hand.map((card, idx) => {
+                      const lm = card.type==='LANDMARK' ? LANDMARK_TYPES.find(l=>l.id===card.landmarkTypeId) : null;
+                      const isSel = selectedCardIdx === idx || selectedForSwap.includes(idx);
+                      return (
+                         <button key={idx} 
+                            onClick={() => handleCardClick(idx)}
+                            disabled={!myTurn && !swapMode}
+                            className={`relative h-24 flex flex-col items-center justify-center border rounded p-1 transition-all 
+                               ${isSel ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-slate-50 bg-white'}
+                               ${swapMode && isSel ? 'ring-orange-500 bg-orange-50' : ''}
+                            `}
+                         >
+                            {card.type === 'LANDMARK' ? (
+                               <>
+                                  <div className="text-2xl mb-1">{lm?.emoji}</div>
+                                  <div className="text-[9px] font-bold text-center leading-tight">{lm?.name}</div>
+                                  <div className={`absolute top-0 w-full h-1.5 rounded-t ${lm?.color}`}/>
+                               </>
+                            ) : (
+                               <>
+                                  <div className="text-slate-600 mb-1">{card.type==='TRACK_STRAIGHT'?<ArrowUp/>:<CornerUpRight/>}</div>
+                                  <div className="text-[9px] font-bold text-center">{card.type==='TRACK_STRAIGHT'?'STRAIGHT':'CURVE'}</div>
+                               </>
+                            )}
+                         </button>
+                      )
+                   })}
+                </div>
+             </div>
 
-                 {/* PASSENGERS */}
-                 <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Passengers</h3>
-                    <div className="space-y-2">
-                       {gameState.faceUpPassengers.map(pid => {
-                          const p = PASSENGER_PERSONAS.find(x=>x.id===pid)!;
-                          const fromL = p.from.type==='SPECIFIC' ? LANDMARK_TYPES.find(l=>l.id===p.from.value)?.emoji : <span className="text-[10px] font-bold px-1 bg-slate-100 border rounded">{p.from.value}</span>;
-                          const toL = p.to.type==='SPECIFIC' ? LANDMARK_TYPES.find(l=>l.id===p.to.value)?.emoji : <span className="text-[10px] font-bold px-1 bg-slate-100 border rounded">{p.to.value}</span>;
-                          const isDone = me?.completedPassengers.includes(pid);
-                          return (
-                             <div key={pid} className={`p-2 border rounded bg-white flex flex-col gap-1 ${isDone?'opacity-50':''}`}>
-                                <div className="font-bold text-sm">{p.personaName}</div>
-                                <div className="flex items-center gap-2 text-slate-600">
-                                   {fromL} <ArrowUp size={12} className="rotate-90"/> {toL}
-                                </div>
-                             </div>
-                          )
-                       })}
-                    </div>
-                 </div>
+             {/* PASSENGERS */}
+             <div>
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Passengers</h3>
+                <div className="space-y-2">
+                   {gameState.faceUpPassengers.map(pid => {
+                      const p = PASSENGER_PERSONAS.find(x=>x.id===pid)!;
+                      const fromL = p.from.type==='SPECIFIC' ? LANDMARK_TYPES.find(l=>l.id===p.from.value)?.emoji : <span className="text-[10px] font-bold px-1 bg-slate-100 border rounded">{p.from.value}</span>;
+                      const toL = p.to.type==='SPECIFIC' ? LANDMARK_TYPES.find(l=>l.id===p.to.value)?.emoji : <span className="text-[10px] font-bold px-1 bg-slate-100 border rounded">{p.to.value}</span>;
+                      const isDone = me?.completedPassengers.includes(pid);
+                      return (
+                         <div key={pid} className={`p-2 border rounded bg-white flex flex-col gap-1 ${isDone?'opacity-50':''}`}>
+                            <div className="font-bold text-sm">{p.personaName}</div>
+                            <div className="flex items-center gap-2 text-slate-600">
+                               {fromL} <ArrowUp size={12} className="rotate-90"/> {toL}
+                            </div>
+                         </div>
+                      )
+                   })}
+                </div>
+             </div>
 
-                 {/* LEADERBOARD */}
-                 <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Scores</h3>
-                    {gameState.players.map(p => (
-                       <div key={p.id} className="flex justify-between items-center text-sm p-1">
-                          <div className="flex items-center gap-2">
-                             <div className={`w-3 h-3 rounded-full ${CONFIG.colors[p.colorIdx].tailwind}`}/>
-                             <span className={p.id===currentPlayer.id?'font-bold':''}>{p.name}</span>
-                          </div>
-                          <span className="font-mono font-bold">{p.score}</span>
-                       </div>
-                    ))}
-                 </div>
-              </div>
-            </>
-         )}
+             {/* LEADERBOARD */}
+             <div>
+                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Scores</h3>
+                {gameState.players.map(p => (
+                   <div key={p.id} className="flex justify-between items-center text-sm p-1">
+                      <div className="flex items-center gap-2">
+                         <div className={`w-3 h-3 rounded-full ${CONFIG.colors[p.colorIdx].tailwind}`}/>
+                         <span className={p.id===currentPlayer.id?'font-bold':''}>{p.name}</span>
+                      </div>
+                      <span className="font-mono font-bold">{p.score}</span>
+                   </div>
+                ))}
+             </div>
+
+             {/* ROOM CODE */}
+             <div className="pt-4 border-t text-center">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 rounded-full text-xs font-mono font-bold text-slate-500 cursor-pointer hover:bg-slate-200" onClick={() => navigator.clipboard.writeText(gameState.roomCode)}>
+                  {gameState.roomCode} <Copy size={10}/>
+                </div>
+             </div>
+         </div>
       </div>
       
       {gameState.status === 'FINISHED' && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 animate-pop-in">
            <div className="bg-white rounded-xl p-8 text-center shadow-2xl">
               <Trophy size={64} className="mx-auto text-yellow-500 mb-4"/>
               <h1 className="text-4xl font-black mb-2">WINNER!</h1>

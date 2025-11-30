@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Trophy, Activity, Users, ArrowUp, CornerUpRight, Copy, Check, Menu, X, RotateCcw, Info, AlertCircle } from 'lucide-react';
+import { Trophy, Activity, Users, ArrowUp, CornerUpRight, FastForward, AlertCircle, Copy, Check, Menu, X, RotateCcw, Info, MapPin, RefreshCw } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -17,8 +17,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Changing App ID to force a fresh start for everyone
-const appId = 'mind-the-gap-v4-final'; 
+const appId = 'mind-the-gap-v12-stable'; // Version bump for clean state
 
 /** --- CONFIG --- */
 const CONFIG = {
@@ -35,6 +34,7 @@ const CONFIG = {
   ],
 };
 
+/** --- DATA TYPES --- */
 type Category = 'Spiritual' | 'Thrilling' | 'Cultural' | 'Foodie' | 'Relaxing' | 'Nature' | 'Services' | 'Special';
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Rare';
 
@@ -43,20 +43,14 @@ interface LandmarkType {
   name: string;
   category: Category;
   difficulty: Difficulty;
-  supplyCount: number; 
   emoji: string;
   color: string; 
 }
 
 const CATEGORY_COLORS: Record<Category, string> = {
-  Spiritual: 'bg-[#6b2c91]', 
-  Thrilling: 'bg-[#00a4a7]', 
-  Cultural: 'bg-[#9e1b32]',  
-  Foodie: 'bg-[#e35205]',    
-  Relaxing: 'bg-[#87ceeb]',  
-  Nature: 'bg-[#4c8c2b]',    
-  Services: 'bg-[#cc0000]',  
-  Special: 'bg-slate-800'
+  Spiritual: 'bg-[#6b2c91]', Thrilling: 'bg-[#00a4a7]', Cultural: 'bg-[#9e1b32]', 
+  Foodie: 'bg-[#e35205]', Relaxing: 'bg-[#87ceeb]', Nature: 'bg-[#4c8c2b]', 
+  Services: 'bg-[#cc0000]', Special: 'bg-slate-800'
 };
 
 const CATEGORY_DIFFICULTY: Record<Category, Difficulty> = {
@@ -64,71 +58,55 @@ const CATEGORY_DIFFICULTY: Record<Category, Difficulty> = {
   Relaxing: 'Hard', Nature: 'Medium', Services: 'Easy', Special: 'Easy'
 };
 
-// --- FULL LANDMARK LIST ---
 const LANDMARK_TYPES: LandmarkType[] = [
-  { id: 'l_cityhall', name: 'City Hall', category: 'Special', difficulty: 'Easy', supplyCount: 1, emoji: '🏛️', color: 'bg-slate-800' },
-  // Spiritual
-  { id: 'l_fortune', name: 'Fortune Teller', category: 'Spiritual', difficulty: 'Rare', supplyCount: 1, emoji: '🔮', color: CATEGORY_COLORS.Spiritual },
-  { id: 'l_cemetery', name: 'Cemetery', category: 'Spiritual', difficulty: 'Rare', supplyCount: 1, emoji: '🪦', color: CATEGORY_COLORS.Spiritual },
-  { id: 'l_antique', name: 'Antique Store', category: 'Spiritual', difficulty: 'Rare', supplyCount: 1, emoji: '🏺', color: CATEGORY_COLORS.Spiritual },
-  // Thrilling
-  { id: 'l_theme', name: 'Theme Park', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🎢', color: CATEGORY_COLORS.Thrilling },
-  { id: 'l_zoo', name: 'Zoo', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🦁', color: CATEGORY_COLORS.Thrilling },
-  { id: 'l_stadium', name: 'Stadium', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🏟️', color: CATEGORY_COLORS.Thrilling },
-  { id: 'l_arcade', name: 'Arcade', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🕹️', color: CATEGORY_COLORS.Thrilling },
-  { id: 'l_tattoo', name: 'Tattoo Parlor', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🐉', color: CATEGORY_COLORS.Thrilling },
-  // Cultural
-  { id: 'l_museum', name: 'Museum', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🏛️', color: CATEGORY_COLORS.Cultural },
-  { id: 'l_theatre', name: 'Theatre', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🎭', color: CATEGORY_COLORS.Cultural },
-  { id: 'l_cinema', name: 'Cinema', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🍿', color: CATEGORY_COLORS.Cultural },
-  { id: 'l_clock', name: 'Clock Tower', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🕰️', color: CATEGORY_COLORS.Cultural },
-  { id: 'l_library', name: 'Library', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '📚', color: CATEGORY_COLORS.Cultural },
-  // Foodie
-  { id: 'l_restaurant', name: 'Restaurant', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🍽️', color: CATEGORY_COLORS.Foodie },
-  { id: 'l_deli', name: 'Deli', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🥪', color: CATEGORY_COLORS.Foodie },
-  { id: 'l_sweet', name: 'Sweet Shop', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🍬', color: CATEGORY_COLORS.Foodie },
-  { id: 'l_farmers', name: 'Farmers Market', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🥦', color: CATEGORY_COLORS.Foodie },
-  { id: 'l_cafe', name: 'Cafe', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '☕', color: CATEGORY_COLORS.Foodie },
-  { id: 'l_rooftop', name: 'Rooftop Bar', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🍸', color: CATEGORY_COLORS.Foodie },
-  // Relaxing
-  { id: 'l_pier', name: 'Pier', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '🎡', color: CATEGORY_COLORS.Relaxing },
-  { id: 'l_salon', name: 'Salon', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '💇', color: CATEGORY_COLORS.Relaxing },
-  { id: 'l_park', name: 'Park', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '🌳', color: CATEGORY_COLORS.Relaxing },
-  { id: 'l_spa', name: 'Spa', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '🧖', color: CATEGORY_COLORS.Relaxing },
-  // Nature
-  { id: 'l_observatory', name: 'Observatory', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '🔭', color: CATEGORY_COLORS.Nature },
-  { id: 'l_botanic', name: 'Botanic Garden', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '🌻', color: CATEGORY_COLORS.Nature },
-  { id: 'l_flowers', name: 'Flower Shop', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '💐', color: CATEGORY_COLORS.Nature },
-  { id: 'l_country', name: 'Country Club', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '⛳', color: CATEGORY_COLORS.Nature },
-  { id: 'l_dogpark', name: 'Dog Park', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '🐕', color: CATEGORY_COLORS.Nature },
-  // Services
-  { id: 'l_post', name: 'Post Office', category: 'Services', difficulty: 'Easy', supplyCount: 1, emoji: '📮', color: CATEGORY_COLORS.Services },
-  { id: 'l_airport', name: 'Airport', category: 'Services', difficulty: 'Easy', supplyCount: 1, emoji: '✈️', color: CATEGORY_COLORS.Services },
-  { id: 'l_bank', name: 'Bank', category: 'Services', difficulty: 'Medium', supplyCount: 1, emoji: '💰', color: CATEGORY_COLORS.Services },
-  { id: 'l_mall', name: 'Mall', category: 'Services', difficulty: 'Medium', supplyCount: 1, emoji: '🛍️', color: CATEGORY_COLORS.Services },
-  { id: 'l_gym', name: 'Gym', category: 'Services', difficulty: 'Easy', supplyCount: 1, emoji: '🏋️', color: CATEGORY_COLORS.Services },
-  { id: 'l_fire', name: 'Fire Department', category: 'Services', difficulty: 'Easy', supplyCount: 1, emoji: '🚒', color: CATEGORY_COLORS.Services },
+  { id: 'l_cityhall', name: 'City Hall', category: 'Special', difficulty: 'Easy', emoji: '🏛️', color: 'bg-slate-800' },
+  { id: 'l_fortune', name: 'Fortune Teller', category: 'Spiritual', difficulty: 'Rare', emoji: '🔮', color: CATEGORY_COLORS.Spiritual },
+  { id: 'l_cemetery', name: 'Cemetery', category: 'Spiritual', difficulty: 'Rare', emoji: '🪦', color: CATEGORY_COLORS.Spiritual },
+  { id: 'l_antique', name: 'Antique Store', category: 'Spiritual', difficulty: 'Rare', emoji: '🏺', color: CATEGORY_COLORS.Spiritual },
+  { id: 'l_theme', name: 'Theme Park', category: 'Thrilling', difficulty: 'Medium', emoji: '🎢', color: CATEGORY_COLORS.Thrilling },
+  { id: 'l_zoo', name: 'Zoo', category: 'Thrilling', difficulty: 'Medium', emoji: '🦁', color: CATEGORY_COLORS.Thrilling },
+  { id: 'l_stadium', name: 'Stadium', category: 'Thrilling', difficulty: 'Medium', emoji: '🏟️', color: CATEGORY_COLORS.Thrilling },
+  { id: 'l_arcade', name: 'Arcade', category: 'Thrilling', difficulty: 'Medium', emoji: '🕹️', color: CATEGORY_COLORS.Thrilling },
+  { id: 'l_tattoo', name: 'Tattoo Parlor', category: 'Thrilling', difficulty: 'Medium', emoji: '🐉', color: CATEGORY_COLORS.Thrilling },
+  { id: 'l_museum', name: 'Museum', category: 'Cultural', difficulty: 'Medium', emoji: '🏛️', color: CATEGORY_COLORS.Cultural },
+  { id: 'l_theatre', name: 'Theatre', category: 'Cultural', difficulty: 'Medium', emoji: '🎭', color: CATEGORY_COLORS.Cultural },
+  { id: 'l_cinema', name: 'Cinema', category: 'Cultural', difficulty: 'Medium', emoji: '🍿', color: CATEGORY_COLORS.Cultural },
+  { id: 'l_clock', name: 'Clock Tower', category: 'Cultural', difficulty: 'Medium', emoji: '🕰️', color: CATEGORY_COLORS.Cultural },
+  { id: 'l_library', name: 'Library', category: 'Cultural', difficulty: 'Medium', emoji: '📚', color: CATEGORY_COLORS.Cultural },
+  { id: 'l_restaurant', name: 'Restaurant', category: 'Foodie', difficulty: 'Easy', emoji: '🍽️', color: CATEGORY_COLORS.Foodie },
+  { id: 'l_deli', name: 'Deli', category: 'Foodie', difficulty: 'Easy', emoji: '🥪', color: CATEGORY_COLORS.Foodie },
+  { id: 'l_sweet', name: 'Sweet Shop', category: 'Foodie', difficulty: 'Easy', emoji: '🍬', color: CATEGORY_COLORS.Foodie },
+  { id: 'l_farmers', name: 'Farmers Market', category: 'Foodie', difficulty: 'Easy', emoji: '🥦', color: CATEGORY_COLORS.Foodie },
+  { id: 'l_cafe', name: 'Cafe', category: 'Foodie', difficulty: 'Easy', emoji: '☕', color: CATEGORY_COLORS.Foodie },
+  { id: 'l_rooftop', name: 'Rooftop Bar', category: 'Foodie', difficulty: 'Easy', emoji: '🍸', color: CATEGORY_COLORS.Foodie },
+  { id: 'l_pier', name: 'Pier', category: 'Relaxing', difficulty: 'Hard', emoji: '🎡', color: CATEGORY_COLORS.Relaxing },
+  { id: 'l_salon', name: 'Salon', category: 'Relaxing', difficulty: 'Hard', emoji: '💇', color: CATEGORY_COLORS.Relaxing },
+  { id: 'l_park', name: 'Park', category: 'Relaxing', difficulty: 'Hard', emoji: '🌳', color: CATEGORY_COLORS.Relaxing },
+  { id: 'l_spa', name: 'Spa', category: 'Relaxing', difficulty: 'Hard', emoji: '🧖', color: CATEGORY_COLORS.Relaxing },
+  { id: 'l_observatory', name: 'Observatory', category: 'Nature', difficulty: 'Medium', emoji: '🔭', color: CATEGORY_COLORS.Nature },
+  { id: 'l_botanic', name: 'Botanic Garden', category: 'Nature', difficulty: 'Medium', emoji: '🌻', color: CATEGORY_COLORS.Nature },
+  { id: 'l_flowers', name: 'Flower Shop', category: 'Nature', difficulty: 'Medium', emoji: '💐', color: CATEGORY_COLORS.Nature },
+  { id: 'l_country', name: 'Country Club', category: 'Nature', difficulty: 'Medium', emoji: '⛳', color: CATEGORY_COLORS.Nature },
+  { id: 'l_dogpark', name: 'Dog Park', category: 'Nature', difficulty: 'Medium', emoji: '🐕', color: CATEGORY_COLORS.Nature },
+  { id: 'l_post', name: 'Post Office', category: 'Services', difficulty: 'Easy', emoji: '📮', color: CATEGORY_COLORS.Services },
+  { id: 'l_airport', name: 'Airport', category: 'Services', difficulty: 'Easy', emoji: '✈️', color: CATEGORY_COLORS.Services },
+  { id: 'l_bank', name: 'Bank', category: 'Services', difficulty: 'Medium', emoji: '💰', color: CATEGORY_COLORS.Services },
+  { id: 'l_mall', name: 'Mall', category: 'Services', difficulty: 'Medium', emoji: '🛍️', color: CATEGORY_COLORS.Services },
+  { id: 'l_gym', name: 'Gym', category: 'Services', difficulty: 'Easy', emoji: '🏋️', color: CATEGORY_COLORS.Services },
+  { id: 'l_fire', name: 'Fire Department', category: 'Services', difficulty: 'Easy', emoji: '🚒', color: CATEGORY_COLORS.Services },
 ];
 
 interface PassengerReq { type: 'SPECIFIC' | 'CATEGORY'; value: string; }
 interface PassengerPersona { id: string; personaName: string; from: PassengerReq; to: PassengerReq; }
 
-// --- FULL PASSENGER LIST ---
 const PASSENGER_PERSONAS: PassengerPersona[] = [
-  // Specific -> Specific
   { id: 'p1', personaName: 'The Mystic', from: {type: 'SPECIFIC', value: 'l_fortune'}, to: {type: 'SPECIFIC', value: 'l_cemetery'} },
   { id: 'p2', personaName: 'The Tourist', from: {type: 'SPECIFIC', value: 'l_airport'}, to: {type: 'SPECIFIC', value: 'l_museum'} },
   { id: 'p3', personaName: 'Date Night', from: {type: 'SPECIFIC', value: 'l_restaurant'}, to: {type: 'SPECIFIC', value: 'l_theatre'} },
   { id: 'p4', personaName: 'Family Fun', from: {type: 'SPECIFIC', value: 'l_zoo'}, to: {type: 'SPECIFIC', value: 'l_theme'} },
   { id: 'p5', personaName: 'The Scholar', from: {type: 'SPECIFIC', value: 'l_library'}, to: {type: 'SPECIFIC', value: 'l_antique'} },
-  
-  // Category -> Specific (The Widow)
   { id: 'p_widow', personaName: 'The Widow', from: {type: 'CATEGORY', value: 'Relaxing'}, to: {type: 'SPECIFIC', value: 'l_cemetery'} },
-  
-  // Category -> Category (The Yoga Mom)
   { id: 'p_yoga', personaName: 'The Yoga Mom', from: {type: 'CATEGORY', value: 'Relaxing'}, to: {type: 'CATEGORY', value: 'Nature'} },
-  
-  // Mixed
   { id: 'p_foodie', personaName: 'The Food Critic', from: {type: 'SPECIFIC', value: 'l_airport'}, to: {type: 'CATEGORY', value: 'Foodie'} },
   { id: 'p_shopper', personaName: 'The Shopaholic', from: {type: 'CATEGORY', value: 'Services'}, to: {type: 'SPECIFIC', value: 'l_mall'} },
   { id: 'p_student', personaName: 'The Student', from: {type: 'SPECIFIC', value: 'l_library'}, to: {type: 'CATEGORY', value: 'Foodie'} },
@@ -179,21 +157,29 @@ const getPassengerPoints = (pId: string) => {
 };
 
 const drawLandmark = (deck: string[]) => {
-  if (deck.length === 0) return { card: null, newDeck: [] };
+  if (!deck || deck.length === 0) return { card: null, newDeck: [] };
   const newDeck = [...deck];
-  const typeId = newDeck.shift()!;
-  return { card: { id: Math.random().toString(36), type: 'LANDMARK' as const, landmarkTypeId: typeId }, newDeck };
+  const typeId = newDeck.shift();
+  return { card: typeId ? { id: Math.random().toString(36), type: 'LANDMARK' as const, landmarkTypeId: typeId } : null, newDeck };
 };
 const drawTrack = () => ({ id: Math.random().toString(36), type: Math.random() > 0.5 ? 'TRACK_STRAIGHT' as const : 'TRACK_CURVE' as const });
 
 const generateInitialHand = (deckRef: string[]): { hand: HandCard[], newDeck: string[] } => {
   const hand: HandCard[] = [];
-  let deck = [...deckRef];
+  let deck = deckRef ? [...deckRef] : [];
+
+  // 1. Three Tracks
   for (let i = 0; i < 3; i++) hand.push(drawTrack());
+
+  // 2. Two Landmarks
   for (let i = 0; i < 2; i++) {
     const res = drawLandmark(deck);
-    if (res.card) hand.push(res.card);
-    deck = res.newDeck;
+    if (res.card) {
+      hand.push(res.card);
+      deck = res.newDeck;
+    } else {
+      hand.push(drawTrack());
+    }
   }
   return { hand, newDeck: deck };
 };
@@ -211,27 +197,17 @@ const canPlaceLandmark = (state: GameState, pos: Point, playerId: string): { val
   if (tooClose) return { valid: false, reason: 'Too close to unconnected or your landmark' };
 
   const mySegments = state.placedSegments.filter(s => s.playerId === playerId);
-  const degreeMap = new Map<string, number>();
-  mySegments.forEach(s => {
-    degreeMap.set(`${s.from.x},${s.from.y}`, (degreeMap.get(`${s.from.x},${s.from.y}`)||0)+1);
-    degreeMap.set(`${s.to.x},${s.to.y}`, (degreeMap.get(`${s.to.x},${s.to.y}`)||0)+1);
-  });
-
   let validAnchors: Point[] = [];
   const ch = state.placedLandmarks.find(l => l.typeId === 'l_cityhall');
   if (ch) validAnchors.push(ch.pos); 
 
-  degreeMap.forEach((deg, key) => {
-    if (deg === 1) { 
-      const [x, y] = key.split(',').map(Number);
-      validAnchors.push({ x, y });
-    }
+  mySegments.forEach(s => {
+    validAnchors.push(s.from);
+    validAnchors.push(s.to);
   });
 
   const isWithinRange = validAnchors.some(anchor => getManhattanDist(anchor, pos) <= CONFIG.landmarkSpacing);
-  if (!isWithinRange && mySegments.length > 0) {
-    return { valid: false, reason: 'Must place near your tracks (Distance <= 3)' };
-  }
+  if (!isWithinRange && (mySegments.length > 0 || ch)) return { valid: false, reason: 'Must be near your network' };
 
   return { valid: true };
 };
@@ -251,15 +227,11 @@ const canPlaceTrack = (state: GameState, from: Point, to: Point, playerId: strin
   const isCityHall = (p: Point) => state.placedLandmarks.some(lm => pointsEqual(lm.pos, p) && lm.typeId === 'l_cityhall');
   const hasOwnTrackAt = (p: Point) => state.placedSegments.some(s => s.playerId === playerId && (pointsEqual(s.from, p) || pointsEqual(s.to, p)));
 
-  if (!isCityHall(from) && !hasOwnTrackAt(from) && !isCityHall(to) && !hasOwnTrackAt(to)) {
-    return { valid: false, reason: 'Must connect to your track' };
-  }
+  if (!isCityHall(from) && !hasOwnTrackAt(from) && !isCityHall(to) && !hasOwnTrackAt(to)) return { valid: false, reason: 'Must connect to your track' };
 
   const fromHasMyTrack = state.placedSegments.some(s => s.playerId === playerId && (pointsEqual(s.from, from) || pointsEqual(s.to, from)));
   const toHasMyTrack = state.placedSegments.some(s => s.playerId === playerId && (pointsEqual(s.from, to) || pointsEqual(s.to, to)));
-  if (fromHasMyTrack && toHasMyTrack && !isCityHall(from) && !isCityHall(to)) {
-     return { valid: false, reason: "Cannot merge/loop own tracks" };
-  }
+  if (fromHasMyTrack && toHasMyTrack && !isCityHall(from) && !isCityHall(to)) return { valid: false, reason: "Cannot loop tracks" };
 
   const getMyDegree = (p: Point) => state.placedSegments.filter(s => s.playerId === playerId && (pointsEqual(s.from, p) || pointsEqual(s.to, p))).length;
   if (!isCityHall(from) && getMyDegree(from) >= 2) return { valid: false, reason: "No branching allowed" };
@@ -272,10 +244,8 @@ const canPlaceTrack = (state: GameState, from: Point, to: Point, playerId: strin
   if (mySegs.length > 0 && cardType !== 'TUNNEL') {
     const validGeo = mySegs.some(prev => {
       const prevEnd = pointsEqual(prev.from, anchor) ? prev.to : prev.from;
-      const dx1 = anchor.x - prevEnd.x;
-      const dy1 = anchor.y - prevEnd.y;
-      const dx2 = target.x - anchor.x;
-      const dy2 = target.y - anchor.y;
+      const dx1 = anchor.x - prevEnd.x, dy1 = anchor.y - prevEnd.y;
+      const dx2 = target.x - anchor.x, dy2 = target.y - anchor.y;
       const isStraight = (dx1 === dx2 && dy1 === dy2);
       if (cardType === 'TRACK_STRAIGHT') return isStraight;
       if (cardType === 'TRACK_CURVE') return !isStraight;
@@ -292,16 +262,13 @@ const checkConnection = (state: GameState, playerId: string, passenger: Passenge
     const type = LANDMARK_TYPES.find(t => t.id === l.typeId);
     if (!type) return false;
     if (passenger.from.type === 'SPECIFIC') return type.id === passenger.from.value;
-    if (passenger.from.type === 'CATEGORY') return type.category === passenger.from.value;
-    return false;
+    return type.category === passenger.from.value;
   });
-
   const placedTo = state.placedLandmarks.filter(l => {
     const type = LANDMARK_TYPES.find(t => t.id === l.typeId);
     if (!type) return false;
     if (passenger.to.type === 'SPECIFIC') return type.id === passenger.to.value;
-    if (passenger.to.type === 'CATEGORY') return type.category === passenger.to.value;
-    return false;
+    return type.category === passenger.to.value;
   });
 
   if (placedFrom.length === 0 || placedTo.length === 0) return false;
@@ -321,14 +288,11 @@ const checkConnection = (state: GameState, playerId: string, passenger: Passenge
   for (const startLm of placedFrom) {
     const startKey = `${startLm.pos.x},${startLm.pos.y}`;
     if (!adj.has(startKey)) continue;
-
     const queue = [startKey];
     const visited = new Set<string>([startKey]);
-
     while (queue.length > 0) {
       const curr = queue.shift()!;
       if (targets.has(curr)) return true;
-
       const neighbors = adj.get(curr) || [];
       for (const n of neighbors) {
         if (!visited.has(n)) {
@@ -348,7 +312,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   }
   static getDerivedStateFromError() { return { hasError: true }; }
   componentDidCatch(error: any) { console.error(error); }
-  render() { return this.state.hasError ? <div className="p-8 text-center">Something went wrong. Reload the page.</div> : this.props.children; }
+  render() { return this.state.hasError ? <div className="p-8 text-center">Something went wrong. Please reload.</div> : this.props.children; }
 }
 
 /** --- APP COMPONENT --- */
@@ -420,16 +384,34 @@ function Game() {
     const pDeck = PASSENGER_PERSONAS.map(p=>p.id).sort(() => Math.random()-0.5);
     const faceUp = pDeck.splice(0, 3);
     
-    const players = [...gameState!.players];
-    players.forEach(p => {
+    const updatedPlayers = gameState!.players.map(p => {
       const { hand, newDeck } = generateInitialHand(lDeck);
-      p.hand = hand; lDeck = newDeck;
+      lDeck = newDeck;
+      return { ...p, hand };
     });
 
     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', gameState!.roomCode), {
-      status: 'PLAYING', landmarkDeck: lDeck, passengerDeck: pDeck, faceUpPassengers: faceUp, players
+      status: 'PLAYING', landmarkDeck: lDeck, passengerDeck: pDeck, faceUpPassengers: faceUp, players: updatedPlayers
     });
   };
+
+  // Auto-deal failsafe
+  const forceDealHand = async () => {
+    if (!gameState || !user) return;
+    const { hand } = generateInitialHand(gameState.landmarkDeck || []);
+    const updatedPlayers = gameState.players.map(p => p.id === user.uid ? { ...p, hand } : p);
+    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', gameState.roomCode), { players: updatedPlayers });
+  };
+
+  // Auto-trigger failsafe
+  useEffect(() => {
+     if (gameState?.status === 'PLAYING' && user) {
+        const me = gameState.players.find(p => p.id === user.uid);
+        if (me && (!me.hand || me.hand.length === 0)) {
+           forceDealHand();
+        }
+     }
+  }, [gameState, user]);
 
   const submitMove = async (newState: GameState, desc: string, cardIdx?: number) => {
     const s = {...newState};
@@ -460,6 +442,7 @@ function Game() {
         keptFaceUp.push(pid);
       }
     }
+
     if (claimed.length > 0) {
       s.log = [`${p.name} completed ${claimed.length} passengers!`, ...s.log];
       while (keptFaceUp.length < 3 && s.passengerDeck.length > 0) keptFaceUp.push(s.passengerDeck.shift()!);
@@ -481,8 +464,8 @@ function Game() {
     const s = {...gameState};
     const p = s.players[s.currentPlayerIndex];
     
-    const idsToRemove = selectedForSwap.map(idx => p.hand[idx].id);
-    p.hand = p.hand.filter(c => !idsToRemove.includes(c.id));
+    const newHand = p.hand.filter((_, i) => !selectedForSwap.includes(i));
+    p.hand = newHand;
 
     while (p.hand.length < 5) {
       if (Math.random() > 0.4 || s.landmarkDeck.length === 0) {
@@ -640,7 +623,7 @@ function Game() {
                       </g>
                     )
                 })}
-                {myTurn && selectedNode && selectedCardIdx !== null && me?.hand[selectedCardIdx].type.startsWith('TRACK') && (
+                {myTurn && selectedNode && selectedCardIdx !== null && me?.hand?.[selectedCardIdx]?.type.startsWith('TRACK') && (
                     [{x:0,y:1},{x:0,y:-1},{x:1,y:0},{x:-1,y:0}].map((d,i) => {
                       const t = {x: selectedNode.x+d.x, y: selectedNode.y+d.y};
                       if (t.x<0||t.x>=CONFIG.gridSize||t.y<0||t.y>=CONFIG.gridSize) return null;
@@ -649,7 +632,7 @@ function Game() {
                       return null;
                     })
                 )}
-                {myTurn && selectedCardIdx !== null && me?.hand[selectedCardIdx].type === 'LANDMARK' && hoverNode && (
+                {myTurn && selectedCardIdx !== null && me?.hand?.[selectedCardIdx]?.type === 'LANDMARK' && hoverNode && (
                     canPlaceLandmark(gameState, hoverNode, me.id).valid 
                       ? <rect x={hoverNode.x*40+2} y={hoverNode.y*40+2} width="36" height="36" className="fill-green-400 opacity-40"/>
                       : <rect x={hoverNode.x*40+2} y={hoverNode.y*40+2} width="36" height="36" className="fill-red-400 opacity-40"/>
@@ -711,33 +694,40 @@ function Game() {
                    </div>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                   {me?.hand.map((card, idx) => {
+                   {me?.hand?.map((card, idx) => {
                       const lm = card.type==='LANDMARK' ? LANDMARK_TYPES.find(l=>l.id===card.landmarkTypeId) : null;
                       const isSel = selectedCardIdx === idx || selectedForSwap.includes(idx);
                       return (
                          <button key={idx} 
                             onClick={() => handleCardClick(idx)}
                             disabled={!myTurn && !swapMode}
-                            className={`relative h-24 flex flex-col items-center justify-center border rounded p-1 transition-all 
+                            className={`relative aspect-square flex flex-col items-center justify-between border rounded-lg p-2 shadow-sm transition-all 
                                ${isSel ? 'ring-2 ring-blue-500 bg-blue-50' : 'hover:bg-slate-50 bg-white'}
                                ${swapMode && isSel ? 'ring-orange-500 bg-orange-50' : ''}
                             `}
                          >
                             {card.type === 'LANDMARK' ? (
                                <>
-                                  <div className="text-2xl mb-1">{lm?.emoji}</div>
-                                  <div className="text-[9px] font-bold text-center leading-tight">{lm?.name}</div>
-                                  <div className={`absolute top-0 w-full h-1.5 rounded-t ${lm?.color}`}/>
+                                  <div className="text-3xl">{lm?.emoji}</div>
+                                  <div className="text-[10px] font-bold text-center leading-tight line-clamp-2">{lm?.name}</div>
                                </>
                             ) : (
                                <>
-                                  <div className="text-slate-600 mb-1">{card.type==='TRACK_STRAIGHT'?<ArrowUp/>:<CornerUpRight/>}</div>
-                                  <div className="text-[9px] font-bold text-center">{card.type==='TRACK_STRAIGHT'?'STRAIGHT':'CURVE'}</div>
+                                  <div className="text-slate-600">{card.type==='TRACK_STRAIGHT'?<ArrowUp size={32}/>:<CornerUpRight size={32}/>}</div>
+                                  <div className="text-[10px] font-bold text-center">{card.type==='TRACK_STRAIGHT'?'STRAIGHT':'CURVE'}</div>
                                </>
                             )}
                          </button>
                       )
                    })}
+                   {(!me?.hand || me.hand.length === 0) && (
+                     <div className="col-span-3 flex flex-col items-center justify-center p-4 text-center border-2 border-dashed rounded bg-slate-50">
+                        <p className="text-xs text-slate-400 italic mb-2">Hand Sync Error</p>
+                        <button onClick={forceDealHand} className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded font-bold flex items-center gap-1 hover:bg-blue-200 animate-pulse">
+                           <RefreshCw size={10}/> Repair Hand
+                        </button>
+                     </div>
+                   )}
                 </div>
              </div>
 
@@ -748,7 +738,6 @@ function Game() {
                    {gameState.faceUpPassengers.map(pid => {
                       const p = PASSENGER_PERSONAS.find(x=>x.id===pid)!;
                       
-                      // Fix the rendering here by ensuring we return text or a simple element, not an object
                       const fromLabel = p.from.type === 'SPECIFIC' 
                         ? (LANDMARK_TYPES.find(l => l.id === p.from.value)?.emoji || p.from.value) 
                         : p.from.value;
@@ -760,18 +749,17 @@ function Game() {
                       const isDone = me?.completedPassengers.includes(pid);
                       
                       return (
-                         <div key={pid} className={`p-2 border rounded bg-white flex flex-col gap-1 ${isDone?'opacity-50':''}`}>
+                         <div key={pid} className={`p-3 border rounded bg-white flex flex-col gap-1 ${isDone?'opacity-50':''}`}>
                             <div className="font-bold text-sm">{p.personaName}</div>
                             <div className="flex items-center gap-2 text-slate-600 text-xs">
-                               {/* If it's a category, show text pill. If emoji, show emoji */}
                                {p.from.type === 'CATEGORY' 
-                                 ? <span className="px-1.5 py-0.5 rounded bg-slate-100 border font-bold">{fromLabel}</span>
-                                 : <span className="text-base">{fromLabel}</span>
+                                 ? <span className={`px-2 py-0.5 rounded text-white font-bold ${CATEGORY_COLORS[p.from.value as Category]}`}>{fromLabel}</span>
+                                 : <span className="text-xl">{fromLabel}</span>
                                }
-                               <ArrowUp size={12} className="rotate-90"/> 
+                               <ArrowUp size={12} className="rotate-90 text-slate-400"/> 
                                {p.to.type === 'CATEGORY'
-                                 ? <span className="px-1.5 py-0.5 rounded bg-slate-100 border font-bold">{toLabel}</span>
-                                 : <span className="text-base">{toLabel}</span>
+                                 ? <span className={`px-2 py-0.5 rounded text-white font-bold ${CATEGORY_COLORS[p.to.value as Category]}`}>{toLabel}</span>
+                                 : <span className="text-xl">{toLabel}</span>
                                }
                             </div>
                          </div>
@@ -784,12 +772,12 @@ function Game() {
              <div>
                 <h3 className="text-xs font-bold text-slate-400 uppercase mb-2">Scores</h3>
                 {gameState.players.map(p => (
-                   <div key={p.id} className="flex justify-between items-center text-sm p-1">
+                   <div key={p.id} className="flex justify-between items-center text-sm p-2 border-b last:border-0">
                       <div className="flex items-center gap-2">
                          <div className={`w-3 h-3 rounded-full ${CONFIG.colors[p.colorIdx].tailwind}`}/>
                          <span className={p.id===currentPlayer.id?'font-bold':''}>{p.name}</span>
                       </div>
-                      <span className="font-mono font-bold">{p.score}</span>
+                      <span className="font-mono font-bold">{p.score} pts</span>
                    </div>
                 ))}
              </div>

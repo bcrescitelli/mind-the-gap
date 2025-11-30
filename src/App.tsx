@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Trophy, Activity, Users, ArrowUp, CornerUpRight, FastForward, AlertCircle, Copy, Check } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { RefreshCw, Trophy, Activity, Users, ArrowUp, CornerUpRight, FastForward, MapPin, AlertCircle, Copy, Check } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken, User } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion, collection } from 'firebase/firestore';
 
 /**
  * ============================================================================
@@ -10,7 +10,7 @@ import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot } from 'fireba
  * ============================================================================
  */
 
-// Your actual Firebase configuration
+// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyB0PSNUKgfx7Vsfp1eZKdd71L6_mo-MIgw",
   authDomain: "mind-the-gap-9ccb7.firebaseapp.com",
@@ -19,8 +19,6 @@ const firebaseConfig = {
   messagingSenderId: "118481767440",
   appId: "1:118481767440:web:7cd2df6e9a0d45fab9ce95"
 };
-
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -37,7 +35,7 @@ const appId = 'mind-the-gap';
 const CONFIG = {
   gridSize: 20,
   winScore: 20,
-  landmarkSpacing: 3, 
+  landmarkSpacing: 3, // Changed from 4 to 3 per request
   maxSegmentsPerLandmarkPerPlayer: 2, 
   maxColorsPerLandmark: 2, 
   handSize: 5,
@@ -246,7 +244,11 @@ const generateInitialHand = (deckRef: string[]): { hand: HandCard[], newDeck: st
 const canPlaceLandmark = (state: GameState, pos: Point, playerId: string): { valid: boolean; reason?: string } => {
   if (state.placedLandmarks.some(l => pointsEqual(l.pos, pos))) return { valid: false, reason: 'Occupied' };
   
-  // Spacing Rule: >= 3 spaces from:
+  // NOTE: Removed the "Cannot place on track" restriction. 
+  // You CAN place a landmark on a grid node that has a track segment connected to it.
+  // This allows "building to a spot then placing the landmark".
+
+  // 1. Spacing Rule: >= 3 spaces from:
   // A) Any unconnected (floating) landmark
   // B) Any landmark connected to ME
   // IGNORE opponent's connected landmarks

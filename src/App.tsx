@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Trophy, Activity, Users, ArrowUp, CornerUpRight, Copy, Check, Menu, X, RotateCcw, Info, AlertCircle } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
@@ -17,7 +17,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = 'mind-the-gap-v3'; 
+// Changing App ID to force a fresh start for everyone
+const appId = 'mind-the-gap-v4-final'; 
 
 /** --- CONFIG --- */
 const CONFIG = {
@@ -63,36 +64,44 @@ const CATEGORY_DIFFICULTY: Record<Category, Difficulty> = {
   Relaxing: 'Hard', Nature: 'Medium', Services: 'Easy', Special: 'Easy'
 };
 
+// --- FULL LANDMARK LIST ---
 const LANDMARK_TYPES: LandmarkType[] = [
   { id: 'l_cityhall', name: 'City Hall', category: 'Special', difficulty: 'Easy', supplyCount: 1, emoji: '🏛️', color: 'bg-slate-800' },
+  // Spiritual
   { id: 'l_fortune', name: 'Fortune Teller', category: 'Spiritual', difficulty: 'Rare', supplyCount: 1, emoji: '🔮', color: CATEGORY_COLORS.Spiritual },
   { id: 'l_cemetery', name: 'Cemetery', category: 'Spiritual', difficulty: 'Rare', supplyCount: 1, emoji: '🪦', color: CATEGORY_COLORS.Spiritual },
   { id: 'l_antique', name: 'Antique Store', category: 'Spiritual', difficulty: 'Rare', supplyCount: 1, emoji: '🏺', color: CATEGORY_COLORS.Spiritual },
+  // Thrilling
   { id: 'l_theme', name: 'Theme Park', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🎢', color: CATEGORY_COLORS.Thrilling },
   { id: 'l_zoo', name: 'Zoo', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🦁', color: CATEGORY_COLORS.Thrilling },
   { id: 'l_stadium', name: 'Stadium', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🏟️', color: CATEGORY_COLORS.Thrilling },
   { id: 'l_arcade', name: 'Arcade', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🕹️', color: CATEGORY_COLORS.Thrilling },
   { id: 'l_tattoo', name: 'Tattoo Parlor', category: 'Thrilling', difficulty: 'Medium', supplyCount: 1, emoji: '🐉', color: CATEGORY_COLORS.Thrilling },
+  // Cultural
   { id: 'l_museum', name: 'Museum', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🏛️', color: CATEGORY_COLORS.Cultural },
   { id: 'l_theatre', name: 'Theatre', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🎭', color: CATEGORY_COLORS.Cultural },
   { id: 'l_cinema', name: 'Cinema', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🍿', color: CATEGORY_COLORS.Cultural },
   { id: 'l_clock', name: 'Clock Tower', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '🕰️', color: CATEGORY_COLORS.Cultural },
   { id: 'l_library', name: 'Library', category: 'Cultural', difficulty: 'Medium', supplyCount: 1, emoji: '📚', color: CATEGORY_COLORS.Cultural },
+  // Foodie
   { id: 'l_restaurant', name: 'Restaurant', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🍽️', color: CATEGORY_COLORS.Foodie },
   { id: 'l_deli', name: 'Deli', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🥪', color: CATEGORY_COLORS.Foodie },
   { id: 'l_sweet', name: 'Sweet Shop', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🍬', color: CATEGORY_COLORS.Foodie },
   { id: 'l_farmers', name: 'Farmers Market', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🥦', color: CATEGORY_COLORS.Foodie },
   { id: 'l_cafe', name: 'Cafe', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '☕', color: CATEGORY_COLORS.Foodie },
   { id: 'l_rooftop', name: 'Rooftop Bar', category: 'Foodie', difficulty: 'Easy', supplyCount: 1, emoji: '🍸', color: CATEGORY_COLORS.Foodie },
+  // Relaxing
   { id: 'l_pier', name: 'Pier', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '🎡', color: CATEGORY_COLORS.Relaxing },
   { id: 'l_salon', name: 'Salon', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '💇', color: CATEGORY_COLORS.Relaxing },
   { id: 'l_park', name: 'Park', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '🌳', color: CATEGORY_COLORS.Relaxing },
   { id: 'l_spa', name: 'Spa', category: 'Relaxing', difficulty: 'Hard', supplyCount: 1, emoji: '🧖', color: CATEGORY_COLORS.Relaxing },
+  // Nature
   { id: 'l_observatory', name: 'Observatory', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '🔭', color: CATEGORY_COLORS.Nature },
   { id: 'l_botanic', name: 'Botanic Garden', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '🌻', color: CATEGORY_COLORS.Nature },
   { id: 'l_flowers', name: 'Flower Shop', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '💐', color: CATEGORY_COLORS.Nature },
   { id: 'l_country', name: 'Country Club', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '⛳', color: CATEGORY_COLORS.Nature },
   { id: 'l_dogpark', name: 'Dog Park', category: 'Nature', difficulty: 'Medium', supplyCount: 1, emoji: '🐕', color: CATEGORY_COLORS.Nature },
+  // Services
   { id: 'l_post', name: 'Post Office', category: 'Services', difficulty: 'Easy', supplyCount: 1, emoji: '📮', color: CATEGORY_COLORS.Services },
   { id: 'l_airport', name: 'Airport', category: 'Services', difficulty: 'Easy', supplyCount: 1, emoji: '✈️', color: CATEGORY_COLORS.Services },
   { id: 'l_bank', name: 'Bank', category: 'Services', difficulty: 'Medium', supplyCount: 1, emoji: '💰', color: CATEGORY_COLORS.Services },
@@ -104,14 +113,22 @@ const LANDMARK_TYPES: LandmarkType[] = [
 interface PassengerReq { type: 'SPECIFIC' | 'CATEGORY'; value: string; }
 interface PassengerPersona { id: string; personaName: string; from: PassengerReq; to: PassengerReq; }
 
+// --- FULL PASSENGER LIST ---
 const PASSENGER_PERSONAS: PassengerPersona[] = [
+  // Specific -> Specific
   { id: 'p1', personaName: 'The Mystic', from: {type: 'SPECIFIC', value: 'l_fortune'}, to: {type: 'SPECIFIC', value: 'l_cemetery'} },
   { id: 'p2', personaName: 'The Tourist', from: {type: 'SPECIFIC', value: 'l_airport'}, to: {type: 'SPECIFIC', value: 'l_museum'} },
   { id: 'p3', personaName: 'Date Night', from: {type: 'SPECIFIC', value: 'l_restaurant'}, to: {type: 'SPECIFIC', value: 'l_theatre'} },
   { id: 'p4', personaName: 'Family Fun', from: {type: 'SPECIFIC', value: 'l_zoo'}, to: {type: 'SPECIFIC', value: 'l_theme'} },
   { id: 'p5', personaName: 'The Scholar', from: {type: 'SPECIFIC', value: 'l_library'}, to: {type: 'SPECIFIC', value: 'l_antique'} },
+  
+  // Category -> Specific (The Widow)
   { id: 'p_widow', personaName: 'The Widow', from: {type: 'CATEGORY', value: 'Relaxing'}, to: {type: 'SPECIFIC', value: 'l_cemetery'} },
+  
+  // Category -> Category (The Yoga Mom)
   { id: 'p_yoga', personaName: 'The Yoga Mom', from: {type: 'CATEGORY', value: 'Relaxing'}, to: {type: 'CATEGORY', value: 'Nature'} },
+  
+  // Mixed
   { id: 'p_foodie', personaName: 'The Food Critic', from: {type: 'SPECIFIC', value: 'l_airport'}, to: {type: 'CATEGORY', value: 'Foodie'} },
   { id: 'p_shopper', personaName: 'The Shopaholic', from: {type: 'CATEGORY', value: 'Services'}, to: {type: 'SPECIFIC', value: 'l_mall'} },
   { id: 'p_student', personaName: 'The Student', from: {type: 'SPECIFIC', value: 'l_library'}, to: {type: 'CATEGORY', value: 'Foodie'} },
